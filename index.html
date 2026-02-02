@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rent Manager Pro - Akash Sheikh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input { min-height: 45px; font-size: 16px !important; padding: 8px !important; }
+        th, td { min-width: 120px; }
+        .send-btn { min-width: 60px; height: 40px; }
+        .hidden { display: none; }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCvb5-ucESesD-wkDbXCunBOk1mcf-U-yQ",
+            authDomain: "rentmanagerpro-f0bae.firebaseapp.com",
+            projectId: "rentmanagerpro-f0bae",
+            storageBucket: "rentmanagerpro-f0bae.firebasestorage.app",
+            messagingSenderId: "1072854075313",
+            appId: "1:1072854075313:web:229838dbb0c21426969f90",
+            measurementId: "G-RL7S946QC2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let userName = "";
+
+        window.showSignup = () => {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('signup-form').classList.remove('hidden');
+        };
+        window.showLogin = () => {
+            document.getElementById('signup-form').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+        };
+
+        window.register = async () => {
+            const name = document.getElementById('reg-name').value;
+            const email = document.getElementById('reg-email').value;
+            const pass = document.getElementById('reg-pass').value;
+            if(!name) return alert("আপনার নাম লিখুন");
+            try {
+                const res = await createUserWithEmailAndPassword(auth, email, pass);
+                await setDoc(doc(db, "users", res.user.uid), { name: name });
+                alert("একাউন্ট তৈরি সফল হয়েছে!");
+            } catch (err) { alert("ভুল তথ্য দিয়েছেন অথবা ইমেইলটি আগে ব্যবহার হয়েছে।"); }
+        };
+
+        window.login = async () => {
+            const e = document.getElementById('email').value;
+            const p = document.getElementById('pass').value;
+            try { await signInWithEmailAndPassword(auth, e, p); } 
+            catch { alert("ভুল ইমেইল বা পাসওয়ার্ড!"); }
+        };
+
+        onAuthStateChanged(auth, async user => {
+            if (user) {
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                userName = userDoc.exists() ? userDoc.data().name : "মালিক";
+                document.getElementById('display-name').innerText = userName;
+                document.getElementById('auth-page').classList.add('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                generateYears();
+            } else {
+                document.getElementById('auth-page').classList.remove('hidden');
+                document.getElementById('main-app').classList.add('hidden');
+            }
+        });
+
+        function generateYears() {
+            const yearSelect = document.getElementById('year');
+            const currentYear = 2025;
+            yearSelect.innerHTML = ""; 
+            for (let i = 0; i <= 50; i++) {
+                const year = currentYear + i;
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            }
+        }
+
+        window.logout = () => signOut(auth);
+
+        let curYear, curMonth;
+        window.startApp = () => {
+            curYear = document.getElementById('year').value;
+            document.getElementById('year-sec').classList.add('hidden');
+            document.getElementById('month-sec').classList.remove('hidden');
+        };
+
+        window.openMonth = (m) => {
+            curMonth = m;
+            document.getElementById('month-sec').classList.add('hidden');
+            document.getElementById('table-sec').classList.remove('hidden');
+            document.getElementById('title').innerText = `${m} - ${curYear}`;
+            loadData();
+        };
+
+        window.addRoom = () => {
+            const tbody = document.getElementById('rows');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="border p-2"><input type="text" placeholder="রুম নং" class="w-full border rounded room"></td>
+                <td class="border p-2"><input type="text" placeholder="নাম" class="w-full border rounded name"></td>
+                <td class="border p-2"><input type="tel" placeholder="মোবাইল" class="w-full border rounded mobile"></td>
+                <td class="border p-2"><input type="date" class="w-full border rounded date"></td>
+                <td class="border p-2"><input type="number" placeholder="ভাড়া" oninput="calc(this)" class="w-full border rounded rent"></td>
+                <td class="border p-2"><input type="number" placeholder="জমা" oninput="calc(this)" class="w-full border rounded rec"></td>
+                <td class="border p-2"><input type="number" readonly class="w-full bg-gray-100 rounded due font-bold text-red-600"></td>
+                <td class="border p-2 text-center"><button onclick="send(this)" class="send-btn bg-green-600 text-white w-full rounded font-bold">SMS</button></td>
+            `;
+            tbody.appendChild(tr);
+        };
+
+        window.calc = (el) => {
+            const row = el.closest('tr');
+            const rent = parseFloat(row.querySelector('.rent').value) || 0;
+            const rec = parseFloat(row.querySelector('.rec').value) || 0;
+            row.querySelector('.due').value = rent - rec;
+        };
+
+        window.send = (btn) => {
+            const r = btn.closest('tr');
+            const msg = `রুম: ${r.querySelector('.room').value}, ভাড়াটিয়া: ${r.querySelector('.name').value}, মাস: ${curMonth}, ভাড়া: ${r.querySelector('.rent').value}, জমা: ${r.querySelector('.rec').value}, বকেয়া: ${r.querySelector('.due').value}। ধন্যবাদ - ${userName}`;
+            window.location.href = `sms:${r.querySelector('.mobile').value}?body=${encodeURIComponent(msg)}`;
+        };
+
+        window.saveData = async () => {
+            const btn = document.getElementById('saveBtn');
+            btn.innerText = "সেভিং...";
+            const rows = [];
+            document.querySelectorAll('#rows tr').forEach(tr => {
+                rows.push({
+                    room: tr.querySelector('.room').value,
+                    name: tr.querySelector('.name').value,
+                    mobile: tr.querySelector('.mobile').value,
+                    date: tr.querySelector('.date').value,
+                    rent: tr.querySelector('.rent').value,
+                    rec: tr.querySelector('.rec').value,
+                    due: tr.querySelector('.due').value
+                });
+            });
+            const id = `${auth.currentUser.uid}_${curYear}_${curMonth}`;
+            await setDoc(doc(db, "data", id), { rows });
+            btn.innerText = "সেভ (Cloud)";
+            alert("সব তথ্য নিরাপদে সেভ হয়েছে!");
+        };
+
+        async function loadData() {
+            const id = `${auth.currentUser.uid}_${curYear}_${curMonth}`;
+            const snap = await getDoc(doc(db, "data", id));
+            const tbody = document.getElementById('rows');
+            tbody.innerHTML = "";
+            if(snap.exists()) {
+                snap.data().rows.forEach(d => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="border p-2"><input type="text" class="w-full border rounded room" value="${d.room}"></td>
+                        <td class="border p-2"><input type="text" class="w-full border rounded name" value="${d.name}"></td>
+                        <td class="border p-2"><input type="tel" class="w-full border rounded mobile" value="${d.mobile}"></td>
+                        <td class="border p-2"><input type="date" class="w-full border rounded date" value="${d.date}"></td>
+                        <td class="border p-2"><input type="number" oninput="calc(this)" class="w-full border rounded rent" value="${d.rent}"></td>
+                        <td class="border p-2"><input type="number" oninput="calc(this)" class="w-full border rounded rec" value="${d.rec}"></td>
+                        <td class="border p-2"><input type="number" readonly class="w-full bg-gray-100 rounded due font-bold text-red-600" value="${d.due}"></td>
+                        <td class="border p-2 text-center"><button onclick="send(this)" class="send-btn bg-green-600 text-white w-full rounded font-bold">SMS</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+    </script>
+</head>
+<body class="bg-blue-50 font-sans">
+    <div id="auth-page" class="flex flex-col items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
+            <h1 class="text-3xl font-extrabold mb-2 text-blue-700 text-center">রেন্ট ম্যানেজার প্রো</h1>
+            <p class="text-center text-xs text-gray-400 mb-6 italic">Developed by Akash Sheikh</p>
+            
+            <div id="login-form">
+                <p class="text-center text-gray-500 mb-6 font-bold">লগইন করুন</p>
+                <input id="email" type="email" placeholder="আপনার ইমেইল" class="w-full border-2 p-3 mb-4 rounded-xl focus:border-blue-500 outline-none">
+                <input id="pass" type="password" placeholder="পাসওয়ার্ড" class="w-full border-2 p-3 mb-6 rounded-xl focus:border-blue-500 outline-none">
+                <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-lg transition shadow-lg mb-4">লগইন</button>
+                <p class="text-center text-sm text-gray-600">একাউন্ট নেই? <button onclick="showSignup()" class="text-blue-600 font-bold underline">নতুন একাউন্ট খুলুন</button></p>
+            </div>
+
+            <div id="signup-form" class="hidden">
+                <p class="text-center text-gray-500 mb-6 font-bold">নতুন একাউন্ট তৈরি করুন</p>
+                <input id="reg-name" type="text" placeholder="আপনার নাম (মেসেজে দেখাবে)" class="w-full border-2 p-3 mb-4 rounded-xl focus:border-blue-500 outline-none">
+                <input id="reg-email" type="email" placeholder="ইমেইল" class="w-full border-2 p-3 mb-4 rounded-xl focus:border-blue-500 outline-none">
+                <input id="reg-pass" type="password" placeholder="পাসওয়ার্ড" class="w-full border-2 p-3 mb-6 rounded-xl focus:border-blue-500 outline-none">
+                <button onclick="register()" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-lg transition shadow-lg mb-4">রেজিস্ট্রেশন করুন</button>
+                <p class="text-center text-sm text-gray-600">আগে থেকে একাউন্ট আছে? <button onclick="showLogin()" class="text-blue-600 font-bold underline">লগইন করুন</button></p>
+            </div>
+        </div>
+        <p class="mt-6 text-gray-400 text-sm">© 2025 | Developed by Akash Sheikh</p>
+    </div>
+
+    <div id="main-app" class="hidden min-h-screen p-2 md:p-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow">
+                <div>
+                    <h2 class="text-xl font-bold text-blue-700">স্বাগতম, <span id="display-name"></span></h2>
+                    <p class="text-[10px] text-gray-400 italic">App by Akash Sheikh</p>
+                </div>
+                <div class="text-right">
+                    <button onclick="logout()" class="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold">লগআউট</button>
+                </div>
+            </div>
+
+            <div id="year-sec" class="text-center bg-white p-10 rounded-2xl shadow-lg">
+                <h3 class="text-2xl font-bold mb-6 text-gray-700">বর্তমান বছর বেছে নিন</h3>
+                <select id="year" class="w-full max-w-xs p-4 border-2 border-blue-200 rounded-xl text-xl mb-8 focus:border-blue-500 outline-none"></select><br>
+                <button onclick="startApp()" class="bg-blue-600 text-white px-12 py-4 rounded-full text-xl font-bold shadow-lg hover:bg-blue-700 transition">শুরু করুন</button>
+            </div>
+
+            <div id="month-sec" class="hidden">
+                <h3 class="text-center text-xl font-bold mb-6 text-gray-600">মাস নির্বাচন করুন</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    <script>
+                        const m_list = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+                        m_list.forEach(m => document.write(`
+                            <button onclick="openMonth('${m}')" class="bg-white p-6 rounded-2xl shadow hover:shadow-md hover:bg-blue-50 transition border-b-4 border-blue-200 font-bold text-blue-700 text-lg">
+                                ${m}
+                            </button>
+                        `));
+                    </script>
+                </div>
+                <button onclick="location.reload()" class="mt-8 text-gray-500 font-bold block mx-auto underline">বছর পরিবর্তন করুন</button>
+            </div>
+
+            <div id="table-sec" class="hidden">
+                <div class="bg-blue-600 text-white p-4 rounded-t-2xl flex justify-between items-center shadow-lg">
+                    <h3 id="title" class="font-bold text-xl"></h3>
+                    <button onclick="addRoom()" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-bold shadow">+ নতুন রুম</button>
+                </div>
+                
+                <div class="overflow-x-auto bg-white shadow-xl rounded-b-2xl mb-6">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-100 text-gray-600 text-sm uppercase">
+                            <tr>
+                                <th class="p-4 border">রুম নং</th>
+                                <th class="p-4 border">ভাড়াটিয়ার নাম</th>
+                                <th class="p-4 border">মোবাইল নম্বর</th>
+                                <th class="p-4 border">ভাড়ার তারিখ</th>
+                                <th class="p-4 border text-blue-600">মোট ভাড়া</th>
+                                <th class="p-4 border text-green-600">জমা/আদায়</th>
+                                <th class="p-4 border text-red-600">বকেয়া</th>
+                                <th class="p-4 border text-center">অ্যাকশন</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rows" class="text-gray-700 font-medium"></tbody>
+                    </table>
+                </div>
+
+                <div class="flex flex-wrap gap-4 justify-center pb-6">
+                    <button id="saveBtn" onclick="saveData()" class="bg-green-600 hover:bg-green-700 text-white px-10 py-4 rounded-xl font-bold text-lg shadow-lg transition">সেভ করুন (Cloud)</button>
+                    <button onclick="document.getElementById('table-sec').classList.add('hidden'); document.getElementById('month-sec').classList.remove('hidden');" class="bg-gray-500 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg">পিছনে যান</button>
+                </div>
+            </div>
+
+            <footer class="mt-10 pb-10 text-center">
+                <p class="text-gray-400 text-sm italic">Rent Manager Pro Version 2.2</p>
+                <p class="text-gray-600 font-bold">Developed with ❤️ by <span class="text-blue-600">Akash Sheikh</span></p>
+            </footer>
+        </div>
+    </div>
+</body>
+</html>
+
